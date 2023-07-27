@@ -42,7 +42,7 @@ request(url, (error, response, body) => {
               const contentType = response.headers['content-type'];
               const extname = contentType ? `.${contentType.split('/')[1]}` : '';
               const filename = `${uuid.v4()}${extname}`;
-              request(urlModule.format(urlObj)).pipe(fs.createWriteStream(path.join(__dirname, './docs/images', filename))).on('close', () => {
+              request(urlModule.format(urlObj)).pipe(fs.createWriteStream(path.join(__dirname, 'docs/images', filename))).on('close', () => {
                 $(image).attr('src', `./images/${filename}`);
                 resolve();
               }).on('error', reject);
@@ -63,7 +63,46 @@ request(url, (error, response, body) => {
     Promise.all(promises).then(() => {
       const content = start.html();
       // 将HTML转换为Markdown语法
-      const turndownService = new TurndownService();
+      const turndownService = new TurndownService({gfm: true});
+
+      turndownService.addRule('code', {
+
+        filter (node, options) {
+          return (
+            node.nodeName === 'PRE' &&
+            node.firstChild.nodeName === 'CODE'
+          )
+        },
+      
+        replacement (content, node, options) {
+          const repeat = (str, times) => {
+            return new Array(times + 1).join(str);
+          }
+          
+          const className = node.firstChild.getAttribute('class') || '';
+          const language = (className.match(/language-(\S+)/) || [null, ''])[1];
+          const code = node.firstChild.textContent;
+      
+          const fenceChar = options.fence.charAt(0);
+          const fenceSize = 3;
+          const fenceInCodeRegex = new RegExp('^' + fenceChar + '{3,}', 'gm');
+      
+          let match;
+          while ((match = fenceInCodeRegex.exec(code))) {
+            if (match[0].length >= fenceSize) {
+              fenceSize = match[0].length + 1;
+            }
+          }
+      
+          const fence = repeat(fenceChar, fenceSize);
+      
+          return (
+            '\n\n' + fence + language + '\n' +
+            code.replace(/\n$/, '') +
+            '\n' + fence + '\n\n'
+          )
+        }
+      });
 
       const markdown = turndownService.turndown(content);
 
