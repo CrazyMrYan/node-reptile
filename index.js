@@ -1,4 +1,4 @@
-const url = 'https://juejin.cn/post/7259356504758779965';
+const url = 'https://juejin.cn/post/7221567098466615353';
 const request = require('request');
 const cheerio = require('cheerio');
 const TurndownService = require('turndown');
@@ -10,7 +10,13 @@ const uuid = require('uuid');
 const startElement = '.markdown-body'; // 从.markdown-body元素开始识别Markdown语法
 
 // 创建目录
-const imagesDir = path.join(__dirname, 'images');
+const docsDir = path.join(__dirname, 'docs');
+const imagesDir = path.join(__dirname, 'docs/images');
+
+if(!fs.existsSync(docsDir)) {
+  fs.mkdirSync(docsDir);
+}
+
 if (!fs.existsSync(imagesDir)) {
   fs.mkdirSync(imagesDir);
 }
@@ -66,7 +72,6 @@ request(url, (error, response, body) => {
       const turndownService = new TurndownService({gfm: true});
 
       turndownService.addRule('code', {
-
         filter (node, options) {
           return (
             node.nodeName === 'PRE' &&
