@@ -2,9 +2,17 @@ const request = require('request');
 const cheerio = require('cheerio');
 const fs = require('fs');
 const path = require('path');
+const inquirer = require('inquirer');
 const TurndownService = require('turndown');
 const turndownService = new TurndownService();
 const rules = require('./rules');
+
+const configs = {
+  cursor: 0,
+  target: 'user',
+  userId: '',
+  postId: ''
+}
 
 // 创建目录
 const docsDir = path.join(__dirname, 'docs');
@@ -18,7 +26,7 @@ if (!fs.existsSync(imagesDir)) {
   fs.mkdirSync(imagesDir);
 }
 
-const main = (url) => {
+const handleGrabArticles = (url) => {
   request(url, async (error, response, body) => {
     if (!error && response.statusCode === 200) {
       // 解析DOM元素
@@ -79,16 +87,12 @@ const main = (url) => {
   });
 }
 
-const pageInfo = {
-  cursor: 0,
-}
-
 const getRequestOptions = () => ({
   url: 'https://api.juejin.cn/content_api/v1/article/query_list',
   body: JSON.stringify({
-    cursor: String(pageInfo.cursor),
+    cursor: String(configs.cursor),
     sort_type: 2,
-    user_id: '703340610597064'
+    user_id: configs.userId
   }),
   headers: {
     'content-type': 'application/json'
@@ -97,19 +101,59 @@ const getRequestOptions = () => ({
 
 const postList = []
 
-const getUserPostApi = (requestOptions) => {
+const handleGrabUserArticles = (requestOptions) => {
   request.post(requestOptions, (error, response, body) => {
-    if(response.statusCode === 200 && body) {
+    if(!error && response.statusCode === 200) {
       const { data = [], has_more, cursor } = JSON.parse(body);
-      if(has_more && data?.length) {
-        pageInfo.cursor = cursor;
+
+      if(data?.length) {
         postList.push(...data?.map(article => article.article_id));
-        getUserPostApi(getRequestOptions());
+      }
+      
+      if(has_more) {
+        configs.cursor = cursor;
+        handleGrabUserArticles(getRequestOptions());
       } else {
-        postList.forEach(id => main(`https://juejin.cn/post/${id}`));
+        postList.forEach(id => handleGrabArticles(`https://juejin.cn/post/${id}`));
       }
     }
   })
 }
 
-getUserPostApi(getRequestOptions())
+const main = async () => {
+  const { model: target } = await inquirer.prompt({
+    type: 'list',
+    name: 'model',
+    message: '请选择爬取目标方式',
+    choices: [
+        { name: '通过用户 ID 爬取', value: 'user' },
+        { name: '文通过文章 ID 爬取章', value: 'post' },
+    ],
+    default: configs.target
+  })
+  
+  configs.target = target;
+  
+  if(configs.target === 'user') {
+    const { prompt: userId } = await inquirer.prompt({
+      type: 'input',
+      name: 'prompt',
+      message: '请输入用户 ID',
+    });
+    configs.userId = userId?.trim();
+
+    handleGrabUserArticles(getRequestOptions())
+
+  } else {
+    const { prompt: postId } = await inquirer.prompt({
+      type: 'input',
+      name: 'prompt',
+      message: '请输入文章 ID',
+    });
+    configs.postId = postId?.trim();;
+
+    handleGrabArticles(`https://juejin.cn/post/${configs.postId}`)
+  }
+}
+
+main();
