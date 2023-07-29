@@ -2,6 +2,8 @@
 
 > 这是一个通过掘金文章 URL 进行爬取网页上的爬虫工具，会将网页上的图片保存到本地，然后转化为markdown文件
 
+![](./images/WX20230730-010717@2x.png)
+
 ## 启动方式
 ```shell
 yarn install
@@ -19,4 +21,5 @@ yarn dev
 - [x] 通过终端拿到用户的所有文章内容
 
 ## 该仓库说明博客
-[https://juejin.cn/post/7260852622885896249](https://juejin.cn/post/7260852622885896249)
+[第一章](https://juejin.cn/post/7260852622885896249)
+[第二章](https://juejin.cn/post/7260852622885896249)
