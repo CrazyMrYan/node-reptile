@@ -103,11 +103,15 @@ const postList = []
 
 const handleGrabUserArticles = (requestOptions) => {
   request.post(requestOptions, (error, response, body) => {
-    if(response.statusCode === 200 && body) {
+    if(!error && response.statusCode === 200) {
       const { data = [], has_more, cursor } = JSON.parse(body);
-      if(has_more && data?.length) {
-        configs.cursor = cursor;
+
+      if(data?.length) {
         postList.push(...data?.map(article => article.article_id));
+      }
+      
+      if(has_more) {
+        configs.cursor = cursor;
         handleGrabUserArticles(getRequestOptions());
       } else {
         postList.forEach(id => handleGrabArticles(`https://juejin.cn/post/${id}`));
