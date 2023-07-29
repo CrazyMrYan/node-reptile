@@ -124,17 +124,16 @@ const main = async () => {
   const { model: target } = await inquirer.prompt({
     type: 'list',
     name: 'model',
-    message: '请选择爬取目标',
+    message: '请选择爬取目标方式',
     choices: [
-        { name: '用户', value: 'user' },
-        { name: '文章', value: 'post' },
+        { name: '通过用户 ID 爬取', value: 'user' },
+        { name: '文通过文章 ID 爬取章', value: 'post' },
     ],
     default: configs.target
   })
   
   configs.target = target;
   
-  // '703340610597064'
   if(configs.target === 'user') {
     const { prompt: userId } = await inquirer.prompt({
       type: 'input',
@@ -155,7 +154,6 @@ const main = async () => {
 
     handleGrabArticles(`https://juejin.cn/post/${configs.postId}`)
   }
-  
 }
 
 main();
