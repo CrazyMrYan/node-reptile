@@ -9,12 +9,13 @@ yarn install
 yarn dev
 ```
 
-## 已提供功能
+## TODO LIST
 
 - [x] html 转化 markdown 文件
 - [x] 保存 html 中的图片文件
 - [x] 替换 html 图片中地址为本地路径
 - [x] markdown 文件代码块高亮
 - [x] 通过用户ID爬去所有文章
+- [ ] 通过用户ID爬去所有文章
 
 ## 该仓库说明博客
