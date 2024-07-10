@@ -112,3 +112,6 @@ openai_keys
 .DS_Store
 .vercel
 .env
+
+.idea
+TestJS

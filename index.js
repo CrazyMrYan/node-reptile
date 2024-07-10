@@ -8,93 +8,93 @@ const turndownService = new TurndownService();
 const rules = require('./rules');
 
 const configs = {
-  cursor: 0,
-  target: 'user',
-  userId: '',
-  postId: ''
-}
+	cursor: 0,
+	target: 'user',
+	userId: '',
+	postId: ''
+};
 
 // 创建目录
 const docsDir = path.join(__dirname, 'docs');
 const imagesDir = path.join(__dirname, 'docs/images');
 
-if (!fs.existsSync(docsDir)) {
-  fs.mkdirSync(docsDir);
-}
+if (!fs.existsSync(docsDir)) fs.mkdirSync(docsDir);
+if (!fs.existsSync(imagesDir)) fs.mkdirSync(imagesDir);
 
-if (!fs.existsSync(imagesDir)) {
-  fs.mkdirSync(imagesDir);
-}
+// 爬取文章
+const handleGrabArticles = async (url, id) => {
+	try {
+		console.log(`开始抓取文章: ${url}`);
+		const body = await new Promise((resolve, reject) => {
+			request(url, (error, response, body) => {
+				if (error) return reject(error);
+				if (response.statusCode !== 200) return reject(new Error(`状态码: ${response.statusCode}`));
+				resolve(body);
+			});
+		});
 
-const handleGrabArticles = (url, id) => {
-  request(url, async (error, response, body) => {
-    if (!error && response.statusCode === 200) {
-      // 解析DOM元素
-      const $ = cheerio.load(body);
-      // 获取文章内容
-      const imageElements = $('.markdown-body').find('img');
+		// 解析DOM元素
+		const $ = cheerio.load(body);
+		const content = $('.markdown-body').html();
+		if (!content) throw new Error('无法找到文章内容');
 
-      const tasks = imageElements.map((index, img) => {
-        const imageUrl = $(img).attr('src');
-        if (!imageUrl) return null
+		const imageElements = $('.markdown-body').find('img');
+		console.log(`找到 ${imageElements.length} 个图片元素`);
 
-        return new Promise((resolve, reject) => {
-          request.head(imageUrl, (err, res, body) => {
-            if (err) return null
-            // 获取文件扩展名
-            const contentType = res?.headers['content-type'];
-            let extname = contentType ? `.${contentType.split('/')[1]}` : '';
-            // 获取文件名
-            let filename = path.basename(imageUrl);
+		const tasks = imageElements.map((index, img) => {
+			const imageUrl = $(img).attr('src');
+			if (!imageUrl) return null;
 
-            if (filename.indexOf('.awebp') !== -1) {
-              extname = ''
-              filename = filename.replace('.awebp', '.webp')
-              filename = filename.replace('.awebp?', '.webp')
-              filename = filename.replace('.webp?', '.webp')
-            }
-            // 创建写入流
-            const stream = fs.createWriteStream(path.join(__dirname, 'docs/images', filename + extname));
-            // 管道流
-            request(imageUrl)
-              .pipe(stream)
-              .on('close', () => {
-                $(img).attr('src', `./images/${filename + extname}`);
-                resolve();
-              });
-          });
-        });
-      });
+			return new Promise((resolve, reject) => {
+				request.head(imageUrl, (err, res) => {
+					if (err) return reject(err);
 
-      const linkElements = $('.markdown-body').find('a');
-      linkElements?.map((index, link) => {
-        const url = $(link).attr('href')?.replace('https://link.juejin.cn?target=', '');
-        $(link).attr('href', decodeURIComponent(url));
-      })
+					const contentType = res.headers['content-type'];
+					let extname = contentType ? `.${contentType.split('/')[1]}` : '';
+					let filename = path.basename(imageUrl).replace(/[^a-zA-Z0-9.-]/g, '_').split('_')[0];
 
-      turndownService.addRule('code', rules.code);
-      turndownService.addRule('style', rules.style);
+					if (filename.indexOf('.awebp') !== -1) {
+						extname = '.webp';
+						filename = filename.replace('.awebp', '');
+					}
 
-      const filename = $('title').text().replace(' - 掘金', '')?.trim();
+					if (filename.length > 200) filename = filename.substring(0, 200);
 
-      await Promise.all(tasks);
-      const content = $('.markdown-body').html();
-      try {
-        if (!content) return
-        const description = $('meta[name="description"]').attr("content");
-        const keywords = $('meta[name="keywords"]').attr("content");
-        const datePublished = $('meta[itemprop="datePublished"]').attr("content");
-        // 转换为markdown
-        const markdown = turndownService.turndown(content);
+					const filePath = path.join(imagesDir, `${filename}${extname}`);
+					const stream = fs.createWriteStream(filePath);
 
-        const tags = keywords?.split(',') ?? [];
+					request(imageUrl)
+						.pipe(stream)
+						.on('finish', () => {
+							$(img).attr('src', `./images/${filename}${extname}`);
+							resolve();
+						})
+						.on('error', reject);
+				});
+			});
+		}).get();
 
-        let tagStr = ``;
-        tags.forEach(tag => {
-          tagStr += `\n  - ${tag}`
-        });
+		await Promise.all(tasks.filter((task) => task !== null));
+		console.log('所有图片下载完成');
 
-        const contentMarkdown = `---
+		const filename = $('title').text().replace(' - 掘金', '')?.trim();
+		console.log(`文章标题: ${filename}`);
+
+		turndownService.addRule('code', rules.code);
+		turndownService.addRule('style', rules.style);
+		const markdown = turndownService.turndown(content);
+
+		const description = $('meta[name="description"]').attr('content');
+		const keywords = $('meta[name="keywords"]').attr('content');
+		const datePublished = $('meta[itemprop="datePublished"]').attr('content');
+		const tags = keywords?.split(',') ?? [];
+
+		let tagStr = '';
+		tags.forEach((tag) => {
+			tagStr += `\n  - ${tag}`;
+		});
+
+		const contentMarkdown = `---
 title: "${filename}"
 date: ${datePublished}
 tags: ${tagStr}
@@ -115,84 +115,77 @@ head:
 
 ${markdown}
 `;
-        // 写入文件
-        fs.writeFileSync(`docs/${id}.md`, contentMarkdown);
-        console.log(`文件已生成：${filename} -> ${id}`);
-      } catch (error) {
-        console.log(error);
-        console.log(`错误文章为${url}`);
-      }
-    }
-  });
-}
+
+		const filePath = path.join(docsDir, `${filename}.md`);
+		fs.writeFileSync(filePath, contentMarkdown);
+		console.log(`文件已生成：${filename} -> ${filePath}`);
+	} catch (error) {
+		console.error(`处理文章时出错: ${error}`);
+	}
+};
 
 const getRequestOptions = () => ({
-  url: 'https://api.juejin.cn/content_api/v1/article/query_list',
-  body: JSON.stringify({
-    cursor: String(configs.cursor),
-    sort_type: 2,
-    user_id: configs.userId
-  }),
-  headers: {
-    'content-type': 'application/json'
-  }
+	url: 'https://api.juejin.cn/content_api/v1/article/query_list',
+	body: JSON.stringify({
+		cursor: String(configs.cursor),
+		sort_type: 2,
+		user_id: configs.userId
+	}),
+	headers: {
+		'content-type': 'application/json'
+	}
 });
 
-const postList = []
+const postList = [];
 
 const handleGrabUserArticles = (requestOptions) => {
-  request.post(requestOptions, (error, response, body) => {
-    if (!error && response.statusCode === 200) {
-      const { data = [], has_more, cursor } = JSON.parse(body);
+	request.post(requestOptions, (error, response, body) => {
+		if (error || response.statusCode !== 200) return console.error(`请求用户文章时出错: ${error || response.statusCode}`);
 
-      if (data?.length) {
-        postList.push(...data?.map(article => article.article_id));
-      }
+		const { data = [], has_more, cursor } = JSON.parse(body);
+		if (data?.length) postList.push(...data.map((article) => article.article_id));
 
-      if (has_more) {
-        configs.cursor = cursor;
-        handleGrabUserArticles(getRequestOptions());
-      } else {
-        postList.forEach(id => handleGrabArticles(`https://juejin.cn/post/${id}`, id));
-      }
-    }
-  })
-}
+		if (has_more) {
+			configs.cursor = cursor;
+			handleGrabUserArticles(getRequestOptions());
+		} else {
+			postList.forEach((id) => handleGrabArticles(`https://juejin.cn/post/${id}`, id));
+		}
+	});
+};
 
 const main = async () => {
-  const { model: target } = await inquirer.prompt({
-    type: 'list',
-    name: 'model',
-    message: '请选择爬取目标方式',
-    choices: [
-      { name: '通过用户 ID 爬取', value: 'user' },
-      { name: '文通过文章 ID 爬取章', value: 'post' },
-    ],
-    default: configs.target
-  })
+	const { model: target } = await inquirer.prompt({
+		type: 'list',
+		name: 'model',
+		message: '请选择爬取目标方式',
+		choices: [
+			{ name: '通过用户 ID 爬取', value: 'user' },
+			{ name: '通过文章 ID 爬取', value: 'post' }
+		],
+		default: configs.target
+	});
 
-  configs.target = target;
+	configs.target = target;
 
-  if (configs.target === 'user') {
-    const { prompt: userId } = await inquirer.prompt({
-      type: 'input',
-      name: 'prompt',
-      message: '请输入用户 ID',
-    });
-    configs.userId = userId?.trim();
+	if (configs.target === 'user') {
+		const { prompt: userId } = await inquirer.prompt({
+			type: 'input',
+			name: 'prompt',
+			message: '请输入用户 ID'
+		});
+		configs.userId = userId?.trim();
+		handleGrabUserArticles(getRequestOptions());
+	} else {
+		const { prompt: postId } = await inquirer.prompt({
+			type: 'input',
+			name: 'prompt',
+			message: '请输入文章 ID'
+		});
+		configs.postId = postId?.trim();
+		await handleGrabArticles(`https://juejin.cn/post/${configs.postId}`, configs.postId);
+		console.log('程序执行完毕');
+	}
+};
 
-    handleGrabUserArticles(getRequestOptions())
-
-  } else {
-    const { prompt: postId } = await inquirer.prompt({
-      type: 'input',
-      name: 'prompt',
-      message: '请输入文章 ID',
-    });
-    configs.postId = postId?.trim();;
-
-    handleGrabArticles(`https://juejin.cn/post/${configs.postId}`)
-  }
-}
-
-main();
+main().catch((error) => console.error('程序执行出错:', error));
